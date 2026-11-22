@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>十点半 · 暗夜赌局</title>
+<style>
+:root{--bg:#0c0809;--gold:#d4af37;--blood:#8b0000;--text:#e0d5c1;--dim:#887866}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:radial-gradient(ellipse at 50% 20%,#2a1218,#0c0809 72%);color:var(--text);font-family:Georgia,'Times New Roman',serif;min-height:100vh;padding:14px;display:flex;flex-direction:column;align-items:center}
+h1{color:var(--gold);font-size:23px;letter-spacing:7px;text-shadow:0 0 22px rgba(212,175,55,.5);margin:8px 0 2px}
+.sub{color:var(--dim);font-size:10px;letter-spacing:3px;margin-bottom:16px}
+.wrap{width:100%;max-width:640px}
+.panel{background:linear-gradient(135deg,rgba(30,16,20,.95),rgba(12,8,9,.95));border:1px solid #3a2520;border-radius:8px;padding:18px;margin-bottom:12px}
+.label{color:var(--gold);font-size:13px;letter-spacing:2px;margin-bottom:10px;display:block}
+input{width:100%;background:#1a0f14;border:1px solid #4a3020;color:var(--gold);padding:11px;text-align:center;font-family:inherit;font-size:15px;border-radius:4px;margin-bottom:10px}
+button{background:linear-gradient(135deg,#3a1a1a,#1a0a0a);border:1px solid var(--gold);color:var(--gold);padding:11px 14px;font-size:14px;cursor:pointer;border-radius:4px;font-family:inherit;letter-spacing:2px;transition:all .2s;width:100%;margin-top:7px}
+button:hover:not(:disabled){background:linear-gradient(135deg,#5a2a2a,#2a1a1a);box-shadow:0 0 14px rgba(212,175,55,.3)}
+button:disabled{opacity:.3;cursor:not-allowed}
+button.primary{background:linear-gradient(135deg,#5a1010,#2a0808);border-color:#e05050;color:#ffd0d0}
+.player{border:1px solid #3a2520;border-radius:6px;padding:10px 12px;margin-bottom:9px;transition:all .3s;background:rgba(20,10,14,.6)}
+.player.active{border-color:var(--gold);box-shadow:0 0 16px rgba(212,175,55,.22)}
+.ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-size:14px}
+.pn{color:var(--gold)}.ch{color:#c9a227;font-size:12px}
+.badge{display:inline-block;padding:1px 6px;border-radius:3px;background:#3a1a1a;color:#e05050;font-size:10px;margin-left:5px}
+.cards{display:flex;gap:5px;flex-wrap:wrap;min-height:74px}
+.card{width:50px;height:72px;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 3px 7px rgba(0,0,0,.6)}
+.card.down{background:repeating-linear-gradient(45deg,#3a0808,#3a0808 6px,#2a0404 6px,#2a0404 12px);border:2px solid #6a1515}
+.card.down::before{content:'⛧';font-size:26px;color:#8b1515}
+.card.up{background:linear-gradient(160deg,#241518,#120a0c);border:2px solid #7a5a30;color:var(--gold)}
+.card.half{border-color:var(--blood);color:#e05050;background:linear-gradient(160deg,#2a0e14,#120508)}
+.card .r{font-size:18px}.card .s{font-size:12px}.card .v{font-size:9px;opacity:.6}
+.sc{color:var(--dim);font-size:12px;margin-top:4px}.royal{color:#ffd700!important;text-shadow:0 0 10px #ffd700}
+.info{text-align:center;margin:8px 0;font-size:15px;color:var(--gold)}
+.msg{color:#d05050;font-size:14px;min-height:20px;text-align:center;text-shadow:0 0 8px rgba(208,80,80,.4);margin-bottom:8px}
+.btns{display:flex;gap:7px;flex-wrap:wrap}.btns button{flex:1;min-width:90px;margin-top:6px}
+.row{display:flex;gap:7px}.row button{margin-top:0}
+.share{background:rgba(212,175,55,.08);border:1px dashed #7a5a30;border-radius:5px;padding:10px;font-size:12px;color:var(--gold);text-align:center;word-break:break-all;margin-top:8px}
+.tiny{color:#665a4c;font-size:10px;line-height:1.7;margin-top:12px;text-align:center}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<h1>十 点 半</h1>
+<div class="sub">暗 夜 赌 局 · ROYAL TEN &amp; HALF</div>
+<div class="wrap">
+  <div id="lobby">
+    <div class="panel">
+      <span class="label">你的昵称</span>
+      <input id="nick" placeholder="输入昵称" maxlength="10">
+      <button class="primary" onclick="act('quickmatch')">⚔ 快速匹配对手</button>
+      <button onclick="act('create')">＋ 创建房间（发链接约人）</button>
+      <div class="row" style="margin-top:7px">
+        <input id="codeIn" placeholder="输入房间号" maxlength="6" style="margin:0">
+        <button onclick="act('joincode')" style="width:110px;margin:0">加入</button>
+      </div>
+      <div id="waitTip" class="share hide">正在寻找对手…</div>
+    </div>
+    <div class="tiny">A=1 · 2-10面值 · J/Q/K/大小王=半点 · 首张暗牌 · 超10.5爆牌 · 10+半点=皇家十点半赢3倍 · 初始筹码20</div>
+  </div>
+
+  <div id="game" class="hide">
+    <div class="panel">
+      <div class="info">底池 <span id="pot">0</span>　赌注 <span id="cbet">0</span>　<span id="specN" class="hide">👁 <span id="specC">0</span> 观战</span></div>
+      <div class="msg" id="msg"></div>
+      <div class="player" id="seat1"><div class="ph"><span class="pn" id="n1"></span><span class="ch">筹码 <span id="c1">20</span></span></div><div class="cards" id="h1"></div><div class="sc">点数 <span id="s1">?</span></div></div>
+      <div class="player" id="seat0"><div class="ph"><span class="pn" id="n0"></span><span class="ch">筹码 <span id="c0">20</span></span></div><div class="cards" id="h0"></div><div class="sc">点数 <span id="s0">?</span></div></div>
+      <div id="ctrl"></div>
+      <div class="share" id="shareBox"></div>
+      <div class="btns" style="margin-top:8px">
+        <button id="btnLeave" onclick="location.reload()">离开房间</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let mySeat = -1, myRole = '', roomCode = '', spectator = false;
+const $ = id => document.getElementById(id);
+const nick = () => ($('nick').value || '神秘人').trim();
+
+function act(type) {
+  const name = nick();
+  localStorage.setItem('th_nick', name);
+  if (type === 'create') socket.emit('create', name);
+  if (type === 'quickmatch') { $('waitTip').classList.remove('hide'); socket.emit('quickmatch', name); }
+  if (type === 'joincode') {
+    const code = $('codeIn').value.trim().toUpperCase();
+    if (code) socket.emit('join', { code, name }); else alert('请输入房间号');
+  }
+}
+socket.on('waiting', () => $('waitTip').classList.remove('hide'));
+socket.on('error', msg => alert(msg));
+socket.on('joined', d => {
+  myRole = d.role; mySeat = d.seat ?? -1; roomCode = d.code; spectator = d.role === 'spectator';
+  $('waitTip').classList.add('hide');
+  $('lobby').classList.add('hide'); $('game').classList.remove('hide');
+  const url = location.origin + '/tenhalf.html?room=' + roomCode;
+  $('shareBox').innerHTML = spectator
+    ? '👁 你正在观战 · 房间 ' + roomCode
+    : '房间号 <b>' + roomCode + '</b><br>把链接发到微信约人：<br>' + url +
+      '<br><button style="margin-top:8px" onclick="copyLink(\'' + url + '\')">复制链接</button>';
+});
+function copyLink(url) {
+  navigator.clipboard.writeText(url).then(() => alert('已复制，发到微信即可')).catch(() => prompt('复制这个链接：', url));
+}
+
+function renderCard(c) {
+  if (c.hidden) return '<div class="card down"></div>';
+  const half = c.value === 0.5 ? ' half' : '';
+  const rank = c.rank === 'JOKER' ? '🃏' : c.rank;
+  const suit = c.rank === 'JOKER' ? '' : c.suit;
+  return '<div class="card up' + half + '"><span class="r">' + rank + '</span><span class="s">' + suit + '</span><span class="v">' + c.value + '</span></div>';
+}
+function render(st) {
+  $('pot').textContent = st.pot; $('cbet').textContent = st.currentBet;
+  $('msg').textContent = st.note || (st.result ? st.result.text : '');
+  if (st.spectators > 0) { $('specN').classList.remove('hide'); $('specC').textContent = st.spectators; }
+  else $('specN').classList.add('hide');
+
+  for (let i = 0; i < 2; i++) {
+    const p = st.seats[i];
+    if (!p) continue;
+    $('n' + i).textContent = p.name + (i === st.you ? '（你）' : '');
+    $('c' + i).textContent = p.chips;
+    $('h' + i).innerHTML = p.cards.map(renderCard).join('');
+    const scEl = $('s' + i);
+    scEl.textContent = p.bust ? '爆' : (p.score !== null ? p.score : '?');
+    scEl.className = '';
+    if (p.bust || p.stood) scEl.classList.add('badge');
+    if (st.result && st.result.royal && st.winnerSeat === i) scEl.classList.add('royal');
+    $('seat' + i).classList.toggle('active', st.turn === i && (st.phase === 'betting' || st.phase === 'drawing'));
+  }
+
+  const c = $('ctrl'); c.innerHTML = '';
+  if (spectator) { c.innerHTML = '<div class="msg">👁 观战模式 · 等待玩家操作</div>'; return; }
+  const myTurn = st.turn === mySeat;
+  if (st.phase === 'betting') {
+    if (st.currentBet === 0 && myTurn) {
+      c.innerHTML = '<div class="row"><input id="amt" type="number" value="5" min="1" max="' + (st.seats[mySeat]?.chips||20) + '"><button class="primary" onclick="bet(\'bet\')">下注</button></div><button onclick="bet(\'fold\')">弃牌</button>';
+    } else if (myTurn) {
+      const callN = Math.max(0, st.currentBet - (st.seats[mySeat]?.bet||0));
+      c.innerHTML = '<div class="btns"><button class="primary" onclick="bet(\'call\')">跟注 ' + callN + '</button><button onclick="bet(\'fold\')">弃牌</button></div><div class="row" style="margin-top:7px"><input id="amt" type="number" min="' + (st.currentBet+1) + '" placeholder="加注到…"><button onclick="bet(\'raise\')">加注</button></div>';
+    } else {
+      c.innerHTML = '<div class="msg">等待对手下注…</div>';
+    }
+  } else if (st.phase === 'drawing') {
+    if (myTurn) c.innerHTML = '<div class="btns"><button class="primary" onclick="draw(\'hit\')">要牌</button><button onclick="draw(\'stand\')">停牌</button></div>';
+    else c.innerHTML = '<div class="msg">等待对手要牌…</div>';
+  } else if (st.phase === 'result' || st.phase === 'gameover') {
+    let html = st.phase === 'gameover'
+      ? '<button class="primary" onclick="restart()">筹码耗尽 · 重新开始</button>'
+      : '<button class="primary" onclick="next()">下一局</button>';
+    c.innerHTML = html;
+  }
+}
+function bet(action) { const el = $('amt'); socket.emit('bet', { action, amount: el ? Number(el.value) : 0 }); }
+function draw(action) { socket.emit('draw', action); }
+function next() { socket.emit('next'); }
+function restart() { socket.emit('restart'); }
+socket.on('state', render);
+
+// 微信分享链接带房间号 → 自动进入该房间（昵称存本地，进来即用）
+const savedNick = localStorage.getItem('th_nick');
+if (savedNick) $('nick').value = savedNick;
+const q = new URLSearchParams(location.search).get('room');
+if (q) {
+  $('codeIn').value = q;
+  const name = (savedNick || '').trim() || '玩家';
+  socket.emit('join', { code: q, name });
+}
+</script>
+</body>
+</html>
