@@ -65,8 +65,12 @@ class Room {
     this.acted = [false, false];
     this.result = null;
     this.winnerSeat = -1;
+    this.roundNo = 0;          // 局数计数
+    this.lastNote = '';
   }
   get players() { return this.slots.filter(Boolean); }
+  /** 东家 = 座位最靠前的玩家（创建者）；东家离开后自动转移给剩余玩家 */
+  get hostSeat() { return this.slots.findIndex(p => p); }
   playerCount() { return this.players.length; }
   empty() { return this.playerCount() === 0 && this.spectators.size === 0; }
   /** 找空座位，返回索引或-1 */
@@ -91,14 +95,16 @@ class Room {
   }
 
   beginBetting() {
+    this.roundNo += 1;
     this.phase = 'betting';
     this.pot = 0; this.currentBet = 0; this.bets = [0, 0];
     this.acted = [false, false]; this.turn = 0; this.result = null;
     this.winnerSeat = -1;
     this.deck = [];
+    // 关键：彻底清空上一局的牌和状态，避免残留显示
     this.slots.forEach(p => { if (p) { p.cards = []; p.stood = false; p.bust = false; } });
+    this.lastNote = `第 ${this.roundNo} 局 · 请玩家下注`;
     this.broadcastAll();
-    this.note('对局开始 · 玩家1请先下注');
   }
 
   /** 下注动作：action in {bet|call|raise|fold}, amount 仅 bet/raise 有效 */
@@ -141,8 +147,8 @@ class Room {
     this.deck = makeDeck();
     this.slots.forEach(p => { if (p) { p.cards = [this.deck.pop()]; p.stood = false; p.bust = false; } });
     this.turn = 0;
+    this.lastNote = '暗牌已发 · 玩家1选择要牌或停牌';
     this.broadcastAll();
-    this.note('暗牌已发 · 玩家1选择要牌或停牌');
   }
 
   handleDraw(seat, action) {
@@ -194,21 +200,35 @@ class Room {
     }
     this.winnerSeat = winnerSeat;
     this.result = result;
-    const broke = this.slots.some(p => p && p.chips <= 0);
-    this.phase = broke ? 'gameover' : 'result';
+    const brokeIdx = this.slots.findIndex(p => p && p.chips <= 0);
+    if (brokeIdx !== -1) {
+      // 筹码耗尽：明确告诉玩家最终输赢
+      const champion = 1 - brokeIdx;
+      result.gameOver = true;
+      result.brokeSeat = brokeIdx;
+      result.championSeat = champion;
+      result.finalText = `${this.slots[champion].name} 赢下整场 · ${this.slots[brokeIdx].name} 筹码输光`;
+      this.lastNote = result.finalText;
+      this.phase = 'gameover';
+    } else {
+      this.phase = 'result';
+    }
     this.broadcastAll();
   }
 
-  nextRound() {
+  nextRound(seat) {
     if (this.phase !== 'result') return;
+    if (seat !== this.hostSeat) return; // 只有东家能开下一局
     this.beginBetting();
   }
-  restart() {
+  restart(seat) {
+    if (seat !== this.hostSeat) return; // 只有东家能重开
+    this.roundNo = 0;
     this.slots.forEach(p => { if (p) p.chips = START_CHIPS; });
     this.beginBetting();
   }
 
-  note(text) { this.result = this.result || null; this.lastNote = text; this.broadcastAll(); }
+  note(text) { this.lastNote = text; this.broadcastAll(); }
 
   /** 按视角生成状态：暗牌仅本人可见；结果/结束时全员可见；观战者始终可见 */
   stateFor(viewerId) {
@@ -230,6 +250,7 @@ class Room {
       pot: this.pot, currentBet: this.currentBet, turn: this.turn,
       result: this.result, note: this.lastNote || '',
       winnerSeat: this.winnerSeat,
+      hostSeat: this.hostSeat, roundNo: this.roundNo,
       startChips: START_CHIPS
     };
   }
@@ -281,6 +302,7 @@ io.on('connection', socket => {
     const seat = room.addPlayer(sock.id, name || `玩家${room.playerCount() + 1}`);
     if (seat === -1) {
       room.spectators.add(sock.id);
+      roomCodeBind.set(sock.id, room.code); // 观战者也绑定，便于聊天/离开
       sock.emit('joined', { code: room.code, role: 'spectator' });
     } else {
       roomCodeBind.set(sock.id, room.code);
@@ -303,11 +325,28 @@ io.on('connection', socket => {
   });
   socket.on('next', () => {
     const room = rooms.get(roomCodeBind.get(socket.id));
-    if (room) room.nextRound();
+    if (!room) return;
+    const seat = room.slots.findIndex(p => p && p.id === socket.id);
+    room.nextRound(seat);
   });
   socket.on('restart', () => {
     const room = rooms.get(roomCodeBind.get(socket.id));
-    if (room) room.restart();
+    if (!room) return;
+    const seat = room.slots.findIndex(p => p && p.id === socket.id);
+    room.restart(seat);
+  });
+
+  // 房间聊天：玩家和观战者都能发言
+  socket.on('chat', text => {
+    const room = rooms.get(roomCodeBind.get(socket.id));
+    if (!room) return;
+    const p = room.slots.find(p => p && p.id === socket.id);
+    const name = p ? p.name : '👁观众';
+    const safe = String(text || '').slice(0, 80);
+    if (!safe.trim()) return;
+    const payload = { name, text: safe, spectator: !p };
+    for (const sp of room.players) io.to(sp.id).emit('chat', payload);
+    for (const sid of room.spectators) io.to(sid).emit('chat', payload);
   });
 
   socket.on('disconnect', () => {
